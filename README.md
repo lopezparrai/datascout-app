@@ -19,10 +19,12 @@ For non-technical users, the barrier is even higher. They cannot explore their o
 
 DataScout is an **autonomous conversational agent**. Unlike traditional text-based QA chatbots, DataScout is equipped with real Python tools using the Gemini API's **Function Calling** capabilities.
 
-Instead of relying on a hardcoded workflow pipeline, the model acts as an intelligent orchestrator. It has access to 7 specific tools: `describe_data`, `detect_outliers`, `run_correlation`, `plot_chart`, `audit_data_quality`, `generate_report`, and `modify_data`. When a user asks a question, Gemini autonomously decides which tool to use, extracts the correct parameters from the conversation, asks the backend server to execute the function against the in-memory DataFrame, and uses the actual numerical results to formulate a natural, well-reasoned response.
+Instead of relying on a hardcoded workflow pipeline, the model acts as an intelligent orchestrator. It has access to 8 specific tools: `describe_data`, `detect_outliers`, `run_correlation`, `plot_chart`, `audit_data_quality`, `calculate_kpi`, `generate_report`, and `modify_data`. When a user asks a question, Gemini autonomously decides which tool to use, extracts the correct parameters from the conversation, asks the backend server to execute the function against the in-memory DataFrame, and uses the actual numerical results to formulate a natural, well-reasoned response.
 
 **New Business-Oriented Capabilities:**
 - **Proactive Profiling:** Upon uploading a dataset, the agent automatically profiles the schema and proactively suggests 2 high-value business questions to kickstart the analysis.
+- **Business KPI Engine:** The agent can use the `calculate_kpi` tool to derive new financial metrics (e.g., Margins, Conversion Rates) on the fly.
+- **Interactive Enterprise Visualization:** DataScout uses `plotly.express` to generate interactive, professional charts (hover, zoom, pan) directly in the chat interface.
 - **Data Governance Audit:** The agent can mathematically score the dataset's quality (nulls, duplicates) and suggest remediation plans.
 - **Executive Report Generation:** At any point, the agent can synthesize its findings and draft a professional Markdown report, automatically rendering a UI button for the user to download it.
 

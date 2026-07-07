@@ -13,7 +13,7 @@ never hardcoded here, never committed to the repo.
 import streamlit as st
 import pandas as pd
 from scipy import stats
-import matplotlib.pyplot as plt
+import plotly.express as px
 from google import genai
 from google.genai import types
 
@@ -150,27 +150,27 @@ def run_correlation(col_a: str, col_b: str) -> str:
 
 def plot_chart(column: str, chart_type: str = "histogram") -> str:
     """
-    Generates a chart (histogram or boxplot) for a numeric column.
+    Generates an interactive chart (histogram or boxplot) for a numeric column.
     
     Expected parameters from Gemini:
     - column (str): The name of the numeric column to plot.
     - chart_type (str, optional): The type of chart ('histogram' or 'boxplot').
     
     Returns:
-    - A string confirming the chart was generated and displayed in the UI.
+    - A string confirming the interactive chart was generated and displayed in the UI.
     """
     df = st.session_state.df
     if column not in df.columns:
         return f"Column '{column}' does not exist."
-    fig, ax = plt.subplots(figsize=(6, 4))
+    
     if chart_type == "boxplot":
-        ax.boxplot(df[column].dropna())
+        fig = px.box(df, y=column, title=f"Interactive Boxplot of {column}")
     else:
-        ax.hist(df[column].dropna(), bins=30)
-    ax.set_title(f"{chart_type} of {column}")
-    st.pyplot(fig)
+        fig = px.histogram(df, x=column, title=f"Interactive Histogram of {column}", nbins=30)
+        
+    st.plotly_chart(fig, use_container_width=True)
     st.session_state.session_memory["actions_taken"].append(f"plot_chart:{column}")
-    return f"Chart ({chart_type}) of '{column}' generated and displayed above."
+    return f"Interactive chart ({chart_type}) of '{column}' generated and displayed above."
 
 def modify_data(operation: str, column: str) -> str:
     """
@@ -244,6 +244,38 @@ def generate_report(markdown_content: str) -> str:
     st.session_state.session_memory["actions_taken"].append("generate_report")
     return "Report successfully generated and is now available for download in the sidebar."
 
+def calculate_kpi(col_a: str, col_b: str, operation: str, new_name: str) -> str:
+    """
+    Calculates a new business KPI column based on two existing numeric columns.
+    
+    Expected parameters from Gemini:
+    - col_a (str): First numeric column.
+    - col_b (str): Second numeric column.
+    - operation (str): Mathematical operation ('add', 'subtract', 'multiply', 'divide').
+    - new_name (str): The name for the newly created KPI column.
+    
+    Returns:
+    - A string confirming the new KPI column was successfully created.
+    """
+    df = st.session_state.df
+    if col_a not in df.columns or col_b not in df.columns:
+        return "One or both columns do not exist in the dataset."
+    
+    if operation == "add":
+        df[new_name] = df[col_a] + df[col_b]
+    elif operation == "subtract":
+        df[new_name] = df[col_a] - df[col_b]
+    elif operation == "multiply":
+        df[new_name] = df[col_a] * df[col_b]
+    elif operation == "divide":
+        df[new_name] = df[col_a] / df[col_b].replace(0, pd.NA)
+    else:
+        return f"Unknown operation '{operation}'. Use 'add', 'subtract', 'multiply', or 'divide'."
+        
+    st.session_state.df = df
+    st.session_state.session_memory["actions_taken"].append(f"calculate_kpi:{new_name}")
+    return f"Successfully created new business KPI '{new_name}'."
+
 # ---------------------------------------------------------------------------
 # Agent call / Tool Schema
 # ---------------------------------------------------------------------------
@@ -259,7 +291,8 @@ AVAILABLE_TOOLS = {
     "plot_chart": plot_chart,
     "modify_data": modify_data,
     "audit_data_quality": audit_data_quality,
-    "generate_report": generate_report
+    "generate_report": generate_report,
+    "calculate_kpi": calculate_kpi
 }
 
 def ask_agent(user_message: str) -> str:
