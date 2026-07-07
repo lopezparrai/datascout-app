@@ -1,7 +1,7 @@
 """
 DataScout — Streamlit web app version.
 
-Reuses the same agent logic as the Colab notebook (5 tools + Gemini function
+Reuses the same agent logic as the Colab notebook (8 tools + Gemini function
 calling + human-in-the-loop guardrail + SKILL.md-based instructions), wrapped
 in a Streamlit chat UI for public deployment.
 
@@ -261,6 +261,15 @@ def calculate_kpi(col_a: str, col_b: str, operation: str, new_name: str) -> str:
     if col_a not in df.columns or col_b not in df.columns:
         return "One or both columns do not exist in the dataset."
     
+    # [HACKATHON NOTE] SECURITY FIX (Additive vs Destructive Mutation):
+    # calculate_kpi mutates the DataFrame directly without HITL confirmation because 
+    # creating a derived metric is an additive, non-destructive operation. 
+    # However, we must warn the LLM if it overwrites an existing column so it can 
+    # transparently communicate this to the user.
+    warning_msg = ""
+    if new_name in df.columns:
+        warning_msg = f" (WARNING: Column '{new_name}' already existed and was overwritten)"
+    
     if operation == "add":
         df[new_name] = df[col_a] + df[col_b]
     elif operation == "subtract":
@@ -274,7 +283,7 @@ def calculate_kpi(col_a: str, col_b: str, operation: str, new_name: str) -> str:
         
     st.session_state.df = df
     st.session_state.session_memory["actions_taken"].append(f"calculate_kpi:{new_name}")
-    return f"Successfully created new business KPI '{new_name}'."
+    return f"Successfully created new business KPI '{new_name}'{warning_msg}."
 
 # ---------------------------------------------------------------------------
 # Agent call / Tool Schema
