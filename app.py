@@ -378,12 +378,24 @@ def ask_agent(user_message: str) -> str:
 # Chat UI
 # ---------------------------------------------------------------------------
 for msg in st.session_state.chat_history:
-    role = "user" if msg.role == "user" else "assistant"
-    # Skip rendering hidden system prompts used for proactive behaviors
-    if role == "user" and getattr(msg.parts[0], "text", "").startswith("SYSTEM:"):
+    # [HACKATHON NOTE] UI Rendering Guard:
+    # `msg.parts[0].text` is exactly `None` (not absent) for function_call and 
+    # function_response parts. We use `or ""` to safely default to a string, 
+    # avoiding AttributeError on `.startswith()` and avoiding printing "None" to the UI.
+    part_text = msg.parts[0].text or ""
+    
+    # Skip rendering messages that are purely internal tool calls/responses (no text)
+    if not part_text:
         continue
+
+    role = "user" if msg.role == "user" else "assistant"
+    
+    # Skip rendering hidden system prompts used for proactive behaviors
+    if role == "user" and part_text.startswith("SYSTEM:"):
+        continue
+        
     with st.chat_message(role):
-        st.write(msg.parts[0].text)
+        st.write(part_text)
 
 if st.session_state.df is not None:
     # [HACKATHON NOTE] Proactive Agent Behavior:
