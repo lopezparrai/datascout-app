@@ -36,6 +36,9 @@ MODEL = "gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
 # Load the agent Skill (SKILL.md) — same Agent Skills pattern as the notebook.
+# This pattern loads the agent's persona and instructions dynamically at runtime,
+# rather than hardcoding them in Python. It separates the agent's behavior
+# from the application logic, making it easier to maintain and scale.
 # ---------------------------------------------------------------------------
 with open(".agent/skills/datascout-analysis/SKILL.md", "r", encoding="utf-8") as f:
     SKILL_DEFINITION = f.read()
@@ -52,11 +55,25 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "pending_confirmation" not in st.session_state:
     st.session_state.pending_confirmation = None  # holds a pending sensitive action
+if "report_content" not in st.session_state:
+    st.session_state.report_content = None
 
 uploaded_file = st.file_uploader("Upload a CSV to analyze", type=["csv"])
 if uploaded_file is not None and st.session_state.df is None:
-    st.session_state.df = pd.read_csv(uploaded_file)
-    st.success(f"Dataset loaded: {st.session_state.df.shape[0]} rows x {st.session_state.df.shape[1]} columns")
+    # [HACKATHON NOTE] Security Guardrail (DoS Prevention):
+    # Enforce a strict file size limit (e.g. 50MB) to prevent malicious actors
+    # from uploading massive files that could crash the Streamlit server (OOM).
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+    if uploaded_file.size > MAX_FILE_SIZE:
+        st.error(f"File is too large. Maximum allowed size is 50MB. Yours is {uploaded_file.size / (1024*1024):.1f}MB.")
+    else:
+        try:
+            # [HACKATHON NOTE] Input Validation:
+            # Safely handle the CSV parsing to catch malformed files instead of crashing.
+            st.session_state.df = pd.read_csv(uploaded_file)
+            st.success(f"Dataset loaded: {st.session_state.df.shape[0]} rows x {st.session_state.df.shape[1]} columns")
+        except Exception as e:
+            st.error(f"Failed to parse the uploaded CSV file. Ensure it is a valid format. Error: {str(e)}")
 
 if st.session_state.df is not None:
     st.dataframe(st.session_state.df.head())
@@ -70,14 +87,41 @@ if st.session_state.df is not None:
 # ---------------------------------------------------------------------------
 
 def describe_data(columns: list[str] = None) -> str:
-    """Returns descriptive statistics for the dataset (or specific columns)."""
+    """
+    Returns descriptive statistics for the dataset (or specific columns).
+    
+    Expected parameters from Gemini:
+    - columns (list[str], optional): List of column names to describe. If None, describes all.
+    
+    Returns:
+    - A string containing the pandas DataFrame summary statistics.
+    """
     df = st.session_state.df
-    subset = df[columns] if columns else df
+    # [HACKATHON NOTE] Input Validation:
+    # Ensure all columns requested by the LLM actually exist in the dataframe 
+    # to prevent KeyErrors caused by model hallucinations.
+    if columns:
+        valid_columns = [col for col in columns if col in df.columns]
+        if not valid_columns:
+            return "Error: None of the requested columns exist in the dataset."
+        subset = df[valid_columns]
+    else:
+        subset = df
+        
     st.session_state.session_memory["actions_taken"].append("describe_data")
     return subset.describe(include="all").to_string()
 
 def detect_outliers(column: str, z_threshold: float = 3.0) -> str:
-    """Detects outliers in a numeric column using z-score."""
+    """
+    Detects outliers in a numeric column using z-score.
+    
+    Expected parameters from Gemini:
+    - column (str): The name of the numeric column to analyze.
+    - z_threshold (float, optional): The z-score threshold (default is 3.0).
+    
+    Returns:
+    - A string reporting the number of outliers found.
+    """
     df = st.session_state.df
     if column not in df.columns or not pd.api.types.is_numeric_dtype(df[column]):
         return f"Column '{column}' does not exist or is not numeric."
@@ -87,7 +131,16 @@ def detect_outliers(column: str, z_threshold: float = 3.0) -> str:
     return f"Found {outlier_count} outliers in '{column}' (z > {z_threshold})."
 
 def run_correlation(col_a: str, col_b: str) -> str:
-    """Computes the Pearson correlation between two numeric columns."""
+    """
+    Computes the Pearson correlation between two numeric columns.
+    
+    Expected parameters from Gemini:
+    - col_a (str): The first numeric column name.
+    - col_b (str): The second numeric column name.
+    
+    Returns:
+    - A string stating the Pearson correlation coefficient.
+    """
     df = st.session_state.df
     if col_a not in df.columns or col_b not in df.columns:
         return "One or both columns do not exist in the dataset."
@@ -96,7 +149,16 @@ def run_correlation(col_a: str, col_b: str) -> str:
     return f"Pearson correlation between '{col_a}' and '{col_b}': {corr:.3f}"
 
 def plot_chart(column: str, chart_type: str = "histogram") -> str:
-    """Generates a chart (histogram or boxplot) for a numeric column."""
+    """
+    Generates a chart (histogram or boxplot) for a numeric column.
+    
+    Expected parameters from Gemini:
+    - column (str): The name of the numeric column to plot.
+    - chart_type (str, optional): The type of chart ('histogram' or 'boxplot').
+    
+    Returns:
+    - A string confirming the chart was generated and displayed in the UI.
+    """
     df = st.session_state.df
     if column not in df.columns:
         return f"Column '{column}' does not exist."
@@ -114,10 +176,18 @@ def modify_data(operation: str, column: str) -> str:
     """
     SENSITIVE ACTION: modifies the dataset (e.g. dropping nulls or outliers).
     
-    [HACKATHON NOTE] Streamlit Stateless UI Workaround & Security Guardrail:
-    In a terminal, we could just block execution with `input()`. In a stateless web app, 
-    we must break execution and store the pending action in `st.session_state`. 
-    The UI renders a Confirm/Cancel button at the bottom of the script. 
+    Expected parameters from Gemini:
+    - operation (str): The mutation operation ('drop_na' or 'drop_outliers').
+    - column (str): The name of the column to mutate.
+    
+    Returns:
+    - A string indicating that a confirmation request was sent to the user.
+    
+    [HACKATHON NOTE] Security Guardrail (Human-in-the-Loop):
+    This is strictly necessary to prevent the LLM from hallucinating and destroying data autonomously.
+    In the original notebook, this was handled by a blocking `input()` terminal prompt. 
+    However, in a stateless web app like Streamlit, we must break execution and store 
+    the pending action in `st.session_state`. The UI later renders a Confirm/Cancel button.
     Nothing is mutated until the user explicitly clicks Confirm.
     """
     df = st.session_state.df
@@ -132,16 +202,64 @@ def modify_data(operation: str, column: str) -> str:
         f"Please confirm using the button below before I proceed."
     )
 
+def audit_data_quality() -> str:
+    """
+    Evaluates the dataset for missing values and duplicates to provide a quality score.
+    
+    Expected parameters from Gemini:
+    - None
+    
+    Returns:
+    - A string detailing the percentage of missing values, duplicate rows, and an overall quality score out of 100.
+    """
+    df = st.session_state.df
+    total_cells = df.size
+    total_missing = df.isna().sum().sum()
+    missing_pct = (total_missing / total_cells) * 100 if total_cells > 0 else 0
+    
+    total_rows = len(df)
+    duplicates = df.duplicated().sum()
+    duplicate_pct = (duplicates / total_rows) * 100 if total_rows > 0 else 0
+    
+    score = max(0, 100 - (missing_pct * 2) - (duplicate_pct * 2))
+    
+    st.session_state.session_memory["actions_taken"].append("audit_data_quality")
+    return (
+        f"Data Quality Score: {score:.1f}/100\n"
+        f"Missing values: {missing_pct:.2f}%\n"
+        f"Duplicate rows: {duplicate_pct:.2f}%\n"
+    )
+
+def generate_report(markdown_content: str) -> str:
+    """
+    Generates an executive report and makes it available for download in the UI.
+    
+    Expected parameters from Gemini:
+    - markdown_content (str): The complete, well-formatted Markdown report summarizing the findings.
+    
+    Returns:
+    - A string confirming the report is ready for download.
+    """
+    st.session_state.report_content = markdown_content
+    st.session_state.session_memory["actions_taken"].append("generate_report")
+    return "Report successfully generated and is now available for download in the sidebar."
+
 # ---------------------------------------------------------------------------
-# Agent call
+# Agent call / Tool Schema
 # ---------------------------------------------------------------------------
 
+# This dictionary defines the function calling schema. 
+# We pass the list of these functions to the Gemini API in GenerateContentConfig.
+# Gemini will automatically parse their signatures and docstrings to know when 
+# and how to call them.
 AVAILABLE_TOOLS = {
     "describe_data": describe_data,
     "detect_outliers": detect_outliers,
     "run_correlation": run_correlation,
     "plot_chart": plot_chart,
-    "modify_data": modify_data
+    "modify_data": modify_data,
+    "audit_data_quality": audit_data_quality,
+    "generate_report": generate_report
 }
 
 def ask_agent(user_message: str) -> str:
@@ -228,10 +346,24 @@ def ask_agent(user_message: str) -> str:
 # ---------------------------------------------------------------------------
 for msg in st.session_state.chat_history:
     role = "user" if msg.role == "user" else "assistant"
+    # Skip rendering hidden system prompts used for proactive behaviors
+    if role == "user" and getattr(msg.parts[0], "text", "").startswith("SYSTEM:"):
+        continue
     with st.chat_message(role):
         st.write(msg.parts[0].text)
 
 if st.session_state.df is not None:
+    # [HACKATHON NOTE] Proactive Agent Behavior:
+    # If the dataset is loaded but no chat history exists, trigger the agent proactively.
+    if len(st.session_state.chat_history) == 0:
+        with st.spinner("Profiling dataset..."):
+            ask_agent(
+                "SYSTEM: You are initializing. Briefly introduce yourself, summarize what this "
+                "dataset seems to be about based on the columns, and proactively suggest 2 specific "
+                "business questions I could ask you. Do NOT use any tools for this response."
+            )
+        st.rerun()
+
     if user_input := st.chat_input("Ask DataScout about your dataset..."):
         with st.chat_message("user"):
             st.write(user_input)
@@ -241,8 +373,10 @@ if st.session_state.df is not None:
             st.write(reply)
 
 # ---------------------------------------------------------------------------
-# Human-in-the-loop confirmation UI (security guardrail, rendered as buttons
-# instead of a blocking terminal input() call).
+# Human-in-the-loop confirmation UI (Security Guardrail).
+# This replaces the blocking `input()` from the notebook. Since Streamlit runs 
+# top-to-bottom on every interaction, we check if there is a pending_confirmation 
+# in the state and render the buttons. Only a human click can trigger the data mutation.
 # ---------------------------------------------------------------------------
 if st.session_state.pending_confirmation:
     action = st.session_state.pending_confirmation
@@ -275,5 +409,16 @@ if st.session_state.pending_confirmation:
             st.rerun()
 
 with st.sidebar:
+    st.subheader("Executive Report")
+    if st.session_state.report_content:
+        st.download_button(
+            label="📄 Download Report (Markdown)",
+            data=st.session_state.report_content,
+            file_name="datascout_executive_report.md",
+            mime="text/markdown"
+        )
+    else:
+        st.info("No report generated yet. Ask the agent to generate one!")
+
     st.subheader("Session memory")
     st.write(st.session_state.session_memory["actions_taken"])
