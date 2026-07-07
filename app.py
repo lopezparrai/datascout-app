@@ -32,7 +32,7 @@ if "GEMINI_API_KEY" not in st.secrets:
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-2.5-flash-lite"
 
 # ---------------------------------------------------------------------------
 # Load the agent Skill (SKILL.md) — the "Agent Skills" pattern.
