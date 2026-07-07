@@ -35,7 +35,7 @@ client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 MODEL = "gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
-# Load the agent Skill (SKILL.md) — same Agent Skills pattern as the notebook.
+# Load the agent Skill (SKILL.md) — the "Agent Skills" pattern.
 # This pattern loads the agent's persona and instructions dynamically at runtime,
 # rather than hardcoding them in Python. It separates the agent's behavior
 # from the application logic, making it easier to maintain and scale.
