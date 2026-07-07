@@ -1,9 +1,9 @@
 """
-DataScout — Streamlit web app version.
+DataScout — Streamlit web app.
 
-Reuses the same agent logic as the Colab notebook (8 tools + Gemini function
-calling + human-in-the-loop guardrail + SKILL.md-based instructions), wrapped
-in a Streamlit chat UI for public deployment.
+Conversational data-analysis agent built with 8 tools + Gemini function
+calling, a human-in-the-loop guardrail for destructive mutations, and
+SKILL.md-based instructions for the agent's persona and behavior.
 
 SECURITY NOTE: the Gemini API key is read from Streamlit secrets
 (st.secrets["GEMINI_API_KEY"]), configured in the Streamlit Cloud dashboard —
@@ -79,11 +79,11 @@ if st.session_state.df is not None:
     st.dataframe(st.session_state.df.head())
 
 # ---------------------------------------------------------------------------
-# Tools — identical logic to the notebook version. Only difference: modify_data
-# cannot use input() in a web app, so the human-in-the-loop confirmation is
-# implemented via a Streamlit button instead of a blocking terminal prompt.
-# The security property is the same: no mutation happens without an explicit,
-# separate human action.
+# Tools — security model: mutations are split into Destructive (modify_data —
+# requires explicit human confirmation via the Confirm/Cancel buttons) and
+# Additive (calculate_kpi — runs autonomously, but warns if it overwrites an
+# existing column so the LLM can inform the user). See SECURITY.md for the
+# full threat model.
 # ---------------------------------------------------------------------------
 
 def describe_data(columns: list[str] = None) -> str:
@@ -183,10 +183,9 @@ def modify_data(operation: str, column: str) -> str:
     Returns:
     - A string indicating that a confirmation request was sent to the user.
     
-    [HACKATHON NOTE] Security Guardrail (Human-in-the-Loop):
+    [SECURITY GUARDRAIL] Human-in-the-Loop:
     This is strictly necessary to prevent the LLM from hallucinating and destroying data autonomously.
-    In the original notebook, this was handled by a blocking `input()` terminal prompt. 
-    However, in a stateless web app like Streamlit, we must break execution and store 
+    Since Streamlit is stateless across reruns, we break execution and store 
     the pending action in `st.session_state`. The UI later renders a Confirm/Cancel button.
     Nothing is mutated until the user explicitly clicks Confirm.
     """
@@ -428,9 +427,9 @@ if st.session_state.df is not None:
 
 # ---------------------------------------------------------------------------
 # Human-in-the-loop confirmation UI (Security Guardrail).
-# This replaces the blocking `input()` from the notebook. Since Streamlit runs 
-# top-to-bottom on every interaction, we check if there is a pending_confirmation 
-# in the state and render the buttons. Only a human click can trigger the data mutation.
+# Since Streamlit runs top-to-bottom on every interaction, we check if there 
+# is a pending_confirmation in the state and render the buttons. Only a human 
+# click can trigger the data mutation.
 # ---------------------------------------------------------------------------
 if st.session_state.pending_confirmation:
     action = st.session_state.pending_confirmation

@@ -9,7 +9,7 @@ We have designed our defenses across four main pillars to ensure safe deployment
 ## 1. Secrets Management (Authentication Security)
 **Risk:** Exposing the Gemini API Key would allow attackers to consume our billing quota or impersonate the application.
 **Mitigation:** 
-- The API key is **never hardcoded** in the source code or notebook.
+- The API key is **never hardcoded** in the source code.
 - The project relies on Streamlit's native Secrets Manager (`st.secrets["GEMINI_API_KEY"]`). 
 - A comprehensive `.gitignore` ensures that local `.env` or `secrets.toml` files are never accidentally committed to the GitHub repository.
 
