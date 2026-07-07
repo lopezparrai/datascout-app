@@ -210,7 +210,7 @@ def ask_agent(user_message: str) -> str:
                 )
                 return response.text
                 
-        return "El agente alcanzó el límite de llamadas a herramientas sin dar una respuesta final."
+        return "The agent reached the tool call limit without giving a final response."
 
     except Exception as e:
         # Revert the user's message from history so they can retry safely
@@ -218,9 +218,9 @@ def ask_agent(user_message: str) -> str:
         
         # Friendly error message for API issues
         return (
-            f"❌ **Error al contactar a Gemini:** `{str(e)}`\n\n"
-            "*Nota: Si acabas de desplegar la app, asegúrate de que tu `GEMINI_API_KEY` en los Secrets "
-            "de Streamlit esté correcta y no tenga comillas dobles extra.*"
+            f"❌ **Error contacting Gemini:** `{str(e)}`\n\n"
+            "*Note: If you just deployed the app, make sure your `GEMINI_API_KEY` in the Streamlit "
+            "Secrets is correct and doesn't contain extra double quotes.*"
         )
 
 # ---------------------------------------------------------------------------
