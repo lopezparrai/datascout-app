@@ -113,11 +113,12 @@ def plot_chart(column: str, chart_type: str = "histogram") -> str:
 def modify_data(operation: str, column: str) -> str:
     """
     SENSITIVE ACTION: modifies the dataset (e.g. dropping nulls or outliers).
-    In this web version, instead of blocking on input(), the request is queued
-    in st.session_state.pending_confirmation and rendered as an explicit
-    Confirm/Cancel button in the UI. Nothing is mutated until the user clicks
-    Confirm — same guardrail property as the notebook, adapted to a non-blocking
-    UI context.
+    
+    [HACKATHON NOTE] Streamlit Stateless UI Workaround & Security Guardrail:
+    In a terminal, we could just block execution with `input()`. In a stateless web app, 
+    we must break execution and store the pending action in `st.session_state`. 
+    The UI renders a Confirm/Cancel button at the bottom of the script. 
+    Nothing is mutated until the user explicitly clicks Confirm.
     """
     df = st.session_state.df
     if column not in df.columns:
@@ -145,6 +146,10 @@ AVAILABLE_TOOLS = {
 
 def ask_agent(user_message: str) -> str:
     df = st.session_state.df
+    
+    # [HACKATHON NOTE] Dynamic Context Engineering (RAG-style):
+    # We dynamically inject the current state of the dataset (available columns) 
+    # directly into the system prompt so the model is aware of the schema before choosing a tool.
     system_instruction = SKILL_DEFINITION + f"\n\nDataset columns available: {list(df.columns)}"
 
     # Convert text to types.Part explicitly to avoid issues
@@ -153,7 +158,10 @@ def ask_agent(user_message: str) -> str:
     )
     
     try:
-        # Loop to handle function calls automatically
+        # [HACKATHON NOTE] Tool Execution Loop:
+        # We loop because Gemini might return a `function_call` instead of text. 
+        # When that happens, the server executes the requested tool, feeds the result back 
+        # as a `function_response`, and asks Gemini to generate the final text based on that data.
         MAX_TURNS = 4
         for _ in range(MAX_TURNS):
             response = client.models.generate_content(
