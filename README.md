@@ -2,7 +2,7 @@
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://datascout-app.streamlit.app/)
 
-**Track:** Concierge Agents  
+**Track:** Agents for Business  
 **Course:** Kaggle × Google — 5-Day AI Agents: Intensive Vibe Coding Course
 
 ---

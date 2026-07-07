@@ -19,7 +19,7 @@ from google.genai import types
 
 st.set_page_config(page_title="DataScout", page_icon="🔎")
 st.title("🔎 DataScout — Conversational Data Analysis Agent")
-st.caption("Concierge Agents track — Kaggle x Google AI Agents Intensive Vibe Coding Course")
+st.caption("Agents for Business track — Kaggle x Google AI Agents Intensive Vibe Coding Course")
 
 # ---------------------------------------------------------------------------
 # Client setup — key comes from Streamlit secrets, never from source code.
