@@ -135,25 +135,85 @@ def modify_data(operation: str, column: str) -> str:
 # Agent call
 # ---------------------------------------------------------------------------
 
+AVAILABLE_TOOLS = {
+    "describe_data": describe_data,
+    "detect_outliers": detect_outliers,
+    "run_correlation": run_correlation,
+    "plot_chart": plot_chart,
+    "modify_data": modify_data
+}
+
 def ask_agent(user_message: str) -> str:
     df = st.session_state.df
     system_instruction = SKILL_DEFINITION + f"\n\nDataset columns available: {list(df.columns)}"
 
+    # Convert text to types.Part explicitly to avoid issues
     st.session_state.chat_history.append(
-        types.Content(role="user", parts=[types.Part(text=user_message)])
+        types.Content(role="user", parts=[types.Part.from_text(text=user_message)])
     )
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=st.session_state.chat_history,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=[describe_data, detect_outliers, run_correlation, plot_chart, modify_data],
-        ),
-    )
-    st.session_state.chat_history.append(
-        types.Content(role="model", parts=[types.Part(text=response.text)])
-    )
-    return response.text
+    
+    try:
+        # Loop to handle function calls automatically
+        MAX_TURNS = 4
+        for _ in range(MAX_TURNS):
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=st.session_state.chat_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    tools=list(AVAILABLE_TOOLS.values()),
+                ),
+            )
+            
+            if response.function_calls:
+                # 1. Append model's tool call to history
+                st.session_state.chat_history.append(response.candidates[0].content)
+                
+                # 2. Execute tools and collect responses
+                function_responses = []
+                for fc in response.function_calls:
+                    if fc.name in AVAILABLE_TOOLS:
+                        func = AVAILABLE_TOOLS[fc.name]
+                        kwargs = {k: v for k, v in fc.args.items()} if fc.args else {}
+                        try:
+                            result_str = str(func(**kwargs))
+                        except Exception as e:
+                            result_str = f"Error executing tool: {str(e)}"
+                    else:
+                        result_str = "Error: Tool not found"
+                        
+                    function_responses.append(
+                        types.Part.from_function_response(
+                            name=fc.name,
+                            response={"result": result_str}
+                        )
+                    )
+                
+                # 3. Append tool responses as 'user' role
+                st.session_state.chat_history.append(
+                    types.Content(role="user", parts=function_responses)
+                )
+                # Continue loop so Gemini can answer using the tool results
+                
+            else:
+                # Normal text response
+                st.session_state.chat_history.append(
+                    types.Content(role="model", parts=[types.Part.from_text(text=response.text or "")])
+                )
+                return response.text
+                
+        return "El agente alcanzó el límite de llamadas a herramientas sin dar una respuesta final."
+
+    except Exception as e:
+        # Revert the user's message from history so they can retry safely
+        st.session_state.chat_history.pop()
+        
+        # Friendly error message for API issues
+        return (
+            f"❌ **Error al contactar a Gemini:** `{str(e)}`\n\n"
+            "*Nota: Si acabas de desplegar la app, asegúrate de que tu `GEMINI_API_KEY` en los Secrets "
+            "de Streamlit esté correcta y no tenga comillas dobles extra.*"
+        )
 
 # ---------------------------------------------------------------------------
 # Chat UI
